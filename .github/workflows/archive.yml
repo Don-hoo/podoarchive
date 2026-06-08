@@ -15,7 +15,7 @@ concurrency:
 jobs:
   archive:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout code
@@ -33,11 +33,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
-          cache-dependency-path: requirements.txt
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          pip install --no-cache-dir -r requirements.txt
 
       - name: Validate secrets
         env:
@@ -54,7 +54,7 @@ jobs:
           check "$ARTIST_ACCOUNTS" "ARTIST_ACCOUNTS"
           check "$TELEGRAM_BOT_TOKEN" "TELEGRAM_BOT_TOKEN"
           check "$TELEGRAM_CHAT_ID" "TELEGRAM_CHAT_ID"
-          echo "Secrets 5개 모두 설정됨"
+          echo "Secrets 5개 OK"
 
       - name: Run archiver
         env:
@@ -67,7 +67,7 @@ jobs:
 
       - name: Save archive.db cache
         uses: actions/cache/save@v4
-        if: always() && hashFiles('archive.db') != ''
+        if: success() && hashFiles('archive.db') != ''
         with:
           path: archive.db
           key: archiver-db-${{ hashFiles('archive.db') }}
