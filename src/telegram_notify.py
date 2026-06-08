@@ -20,9 +20,11 @@ async def send_archived_media(
     tweet_text: str | None,
 ) -> None:
     suffix = file_path.suffix.lower()
+
+    # sendPhoto는 Telegram이 압축함 → 원본은 sendDocument 사용
     if suffix in PHOTO_EXTENSIONS:
-        method = "sendPhoto"
-        field = "photo"
+        method = "sendDocument"
+        field = "document"
     elif suffix in VIDEO_EXTENSIONS:
         method = "sendVideo"
         field = "video"
@@ -45,4 +47,4 @@ async def send_archived_media(
             )
         response.raise_for_status()
 
-    logger.info("Telegram 전송 완료: %s", file_path.name)
+    logger.info("Telegram 전송 완료 (원본): %s", file_path.name)

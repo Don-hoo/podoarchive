@@ -9,6 +9,7 @@ from pathlib import Path
 from twikit import Client
 
 from config import AppConfig
+from media_utils import original_photo_url
 from storage import ArchiveStore
 from telegram_notify import send_archived_media
 
@@ -127,7 +128,12 @@ class XArtArchiver:
                     tweet_text=tweet.text,
                 )
                 saved += 1
-                logger.info("저장: %s", target)
+                size_hint = ""
+                width = getattr(media, "width", None)
+                height = getattr(media, "height", None)
+                if width and height:
+                    size_hint = f" ({width}x{height})"
+                logger.info("저장: %s%s", target, size_hint)
 
                 if self.config.telegram:
                     try:
@@ -155,7 +161,11 @@ class XArtArchiver:
     async def _download_media(media, target: Path) -> None:
         media_type = getattr(media, "type", "")
         if media_type == "photo":
-            await media.download(str(target))
+            url = original_photo_url(getattr(media, "media_url", "") or "")
+            client = media._client
+            response = await client.http.get(url)
+            response.raise_for_status()
+            target.write_bytes(response.content)
             return
 
         if media_type in {"video", "animated_gif"}:
