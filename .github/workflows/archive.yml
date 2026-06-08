@@ -41,20 +41,25 @@ jobs:
 
       - name: Validate secrets
         env:
+          X_AUTH_TOKEN: ${{ secrets.X_AUTH_TOKEN }}
+          X_CT0: ${{ secrets.X_CT0 }}
           ARTIST_ACCOUNTS: ${{ secrets.ARTIST_ACCOUNTS }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           set -e
           check() { if [ -z "$1" ]; then echo "::error::$2 Secret이 비어 있습니다."; exit 1; fi; }
+          check "$X_AUTH_TOKEN" "X_AUTH_TOKEN"
+          check "$X_CT0" "X_CT0"
           check "$ARTIST_ACCOUNTS" "ARTIST_ACCOUNTS"
           check "$TELEGRAM_BOT_TOKEN" "TELEGRAM_BOT_TOKEN"
           check "$TELEGRAM_CHAT_ID" "TELEGRAM_CHAT_ID"
-          echo "Secrets OK (게스트 모드: X 쿠키 불필요)"
+          echo "Secrets 5개 모두 설정됨"
 
       - name: Run archiver
         env:
-          X_AUTH_MODE: guest
+          X_AUTH_TOKEN: ${{ secrets.X_AUTH_TOKEN }}
+          X_CT0: ${{ secrets.X_CT0 }}
           ARTIST_ACCOUNTS: ${{ secrets.ARTIST_ACCOUNTS }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
