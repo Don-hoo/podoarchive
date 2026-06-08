@@ -1,0 +1,66 @@
+name: Archive X Media
+
+on:
+  schedule:
+    # GitHub Actions 최소 주기: 5분
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: x-art-archiver
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Restore archive.db from data branch
+        run: |
+          git fetch origin data:data 2>/dev/null || true
+          git checkout data -- archive.db 2>/dev/null || echo "No archive.db yet"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run archiver
+        env:
+          X_AUTH_TOKEN: ${{ secrets.X_AUTH_TOKEN }}
+          X_CT0: ${{ secrets.X_CT0 }}
+          ARTIST_ACCOUNTS: ${{ secrets.ARTIST_ACCOUNTS }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python src/main.py --once
+
+      - name: Persist archive.db to data branch
+        run: |
+          git config user.name "x-art-archiver[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [ ! -f archive.db ]; then
+            echo "archive.db not found, skipping persist"
+            exit 0
+          fi
+
+          git add -f archive.db
+          if git diff --staged --quiet; then
+            echo "No archive.db changes"
+            exit 0
+          fi
+
+          git commit -m "chore: update archive.db [skip ci]"
+          git push origin HEAD:refs/heads/data

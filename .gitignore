@@ -1,0 +1,9 @@
+config.yaml
+cookies.json
+*.db
+downloads/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
