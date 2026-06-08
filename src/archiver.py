@@ -33,7 +33,8 @@ class XArtArchiver:
                     "ct0": self.config.ct0,
                 }
             )
-            logger.info("config.yaml 의 auth_token / ct0 로 인증")
+            logger.info("auth_token / ct0 로 인증")
+            await self._verify_auth()
             return
 
         if not self.config.login:
@@ -52,6 +53,16 @@ class XArtArchiver:
         )
         self.client.save_cookies(cookies_path)
         logger.info("로그인 완료, 쿠키 저장: %s", cookies_path)
+
+    async def _verify_auth(self) -> None:
+        try:
+            user_id = await self.client.user_id()
+            logger.info("X 인증 확인 OK (user id: %s)", user_id)
+        except Exception as exc:
+            raise RuntimeError(
+                "X 쿠키가 유효하지 않습니다. GitHub Secrets의 "
+                "X_AUTH_TOKEN / X_CT0 를 브라우저에서 다시 복사해 넣어주세요."
+            ) from exc
 
     async def archive_account(self, username: str) -> int:
         user = await self.client.get_user_by_screen_name(username)

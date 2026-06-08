@@ -48,14 +48,14 @@ def load_config_from_env() -> AppConfig:
     if not accounts:
         raise ValueError("ARTIST_ACCOUNTS 환경 변수에 작가 핸들을 넣어주세요.")
 
-    auth_token = os.getenv("X_AUTH_TOKEN")
-    ct0 = os.getenv("X_CT0")
+    auth_token = os.getenv("X_AUTH_TOKEN", "").strip()
+    ct0 = os.getenv("X_CT0", "").strip()
     if not auth_token or not ct0:
         raise ValueError("X_AUTH_TOKEN 과 X_CT0 환경 변수가 필요합니다.")
 
     telegram = None
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
     if bot_token and chat_id:
         telegram = TelegramConfig(bot_token=bot_token, chat_id=chat_id)
 

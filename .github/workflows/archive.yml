@@ -2,12 +2,11 @@ name: Archive X Media
 
 on:
   schedule:
-    # GitHub Actions 최소 주기: 5분
     - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: x-art-archiver
@@ -22,10 +21,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Restore archive.db from data branch
-        run: |
-          git fetch origin data:data 2>/dev/null || true
-          git checkout data -- archive.db 2>/dev/null || echo "No archive.db yet"
+      - name: Restore archive.db cache
+        uses: actions/cache@v4
+        with:
+          path: archive.db
+          key: archiver-db-${{ hashFiles('archive.db') }}
+          restore-keys: |
+            archiver-db-
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -37,6 +39,23 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Validate secrets
+        env:
+          X_AUTH_TOKEN: ${{ secrets.X_AUTH_TOKEN }}
+          X_CT0: ${{ secrets.X_CT0 }}
+          ARTIST_ACCOUNTS: ${{ secrets.ARTIST_ACCOUNTS }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -e
+          check() { if [ -z "$1" ]; then echo "::error::$2 Secret이 비어 있습니다."; exit 1; fi; }
+          check "$X_AUTH_TOKEN" "X_AUTH_TOKEN"
+          check "$X_CT0" "X_CT0"
+          check "$ARTIST_ACCOUNTS" "ARTIST_ACCOUNTS"
+          check "$TELEGRAM_BOT_TOKEN" "TELEGRAM_BOT_TOKEN"
+          check "$TELEGRAM_CHAT_ID" "TELEGRAM_CHAT_ID"
+          echo "Secrets 5개 모두 설정됨"
+
       - name: Run archiver
         env:
           X_AUTH_TOKEN: ${{ secrets.X_AUTH_TOKEN }}
@@ -44,23 +63,11 @@ jobs:
           ARTIST_ACCOUNTS: ${{ secrets.ARTIST_ACCOUNTS }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python src/main.py --once
+        run: python src/main.py --once -v
 
-      - name: Persist archive.db to data branch
-        run: |
-          git config user.name "x-art-archiver[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          if [ ! -f archive.db ]; then
-            echo "archive.db not found, skipping persist"
-            exit 0
-          fi
-
-          git add -f archive.db
-          if git diff --staged --quiet; then
-            echo "No archive.db changes"
-            exit 0
-          fi
-
-          git commit -m "chore: update archive.db [skip ci]"
-          git push origin HEAD:refs/heads/data
+      - name: Save archive.db cache
+        uses: actions/cache/save@v4
+        if: always() && hashFiles('archive.db') != ''
+        with:
+          path: archive.db
+          key: archiver-db-${{ hashFiles('archive.db') }}
