@@ -71,3 +71,23 @@ jobs:
         with:
           path: archive.db
           key: archiver-db-${{ hashFiles('archive.db') }}
+
+  notify-failure:
+    runs-on: ubuntu-latest
+    needs: archive
+    if: failure()
+    steps:
+      - name: Telegram failure alert
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=⚠️ x-art-archiver 실패
+
+          Actions 로그 확인:
+          https://github.com/Don-hoo/podoarchive/actions
+
+          보통 X 쿠키(auth_token, ct0) 만료입니다.
+          GitHub Secrets에서 갱신 후 Run workflow 하세요."
