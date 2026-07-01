@@ -1,12 +1,11 @@
 name: Archive X Media
-
 on:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write   # archive.db를 data 브랜치에 커밋하려면 write 권한이 필요합니다
 
 concurrency:
   group: x-art-archiver
@@ -16,18 +15,18 @@ jobs:
   archive:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Restore archive.db cache
-        uses: actions/cache@v4
-        with:
-          path: archive.db
-          key: archiver-db-${{ hashFiles('archive.db') }}
-          restore-keys: |
-            archiver-db-
+      - name: Restore archive.db from data branch
+        run: |
+          git fetch origin data 2>/dev/null || echo "data 브랜치가 아직 없습니다 (첫 실행)"
+          if git show origin/data:archive.db > archive.db 2>/dev/null; then
+            echo "이전 archive.db 복원 완료"
+          else
+            echo "이전 archive.db 없음, 새로 시작"
+          fi
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -65,12 +64,27 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python src/main.py --once -v
 
-      - name: Save archive.db cache
-        uses: actions/cache/save@v4
-        if: success() && hashFiles('archive.db') != ''
-        with:
-          path: archive.db
-          key: archiver-db-${{ hashFiles('archive.db') }}
+      - name: Save archive.db to data branch
+        if: always() && hashFiles('archive.db') != ''
+        run: |
+          git config user.name "archiver-bot"
+          git config user.email "archiver-bot@users.noreply.github.com"
+
+          # data 브랜치를 위한 임시 작업 공간 준비
+          mkdir -p /tmp/data-branch
+          cp archive.db /tmp/data-branch/archive.db
+
+          if git fetch origin data 2>/dev/null; then
+            git checkout data
+          else
+            git checkout --orphan data
+            git rm -rf . 2>/dev/null || true
+          fi
+
+          cp /tmp/data-branch/archive.db archive.db
+          git add archive.db
+          git commit -m "chore: update archive.db [skip ci]" || echo "변경사항 없음"
+          git push origin data
 
   notify-failure:
     runs-on: ubuntu-latest
@@ -85,9 +99,7 @@ jobs:
           curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
             --data-urlencode "text=⚠️ x-art-archiver 실패
-
           Actions 로그 확인:
           https://github.com/Don-hoo/podoarchive/actions
-
           보통 X 쿠키(auth_token, ct0) 만료입니다.
           GitHub Secrets에서 갱신 후 Run workflow 하세요."
