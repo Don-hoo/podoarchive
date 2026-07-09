@@ -11,9 +11,13 @@ from twikit import Client
 from config import AppConfig
 from media_utils import original_photo_url
 from storage import ArchiveStore
-from telegram_notify import send_archived_media
+from telegram_notify import send_archived_media, send_text_post
 
 logger = logging.getLogger(__name__)
+
+# 텍스트 전용 게시물을 저장할 때 사용하는 media_index 값
+# (실제 media_index는 0 이상이므로 -1은 절대 겹치지 않습니다)
+TEXT_ONLY_INDEX = -1
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -88,6 +92,8 @@ class XArtArchiver:
 
         for tweet in result:
             if not tweet.media:
+                if await self._handle_text_only_tweet(tweet, username):
+                    saved += 1
                 continue
 
             created = getattr(tweet, "created_at_datetime", None) or getattr(
@@ -147,6 +153,38 @@ class XArtArchiver:
                         logger.exception("Telegram 전송 실패: %s", target)
 
         return saved
+
+    async def _handle_text_only_tweet(self, tweet, username: str) -> bool:
+        """미디어 없는 텍스트 전용 게시물을 처리합니다. 새로 처리했으면 True 반환."""
+        if not getattr(tweet, "text", None):
+            # 텍스트조차 없는 글(예: 리트윗만 있는 등)은 건너뜁니다
+            return False
+
+        if self.store.is_archived(tweet.id, TEXT_ONLY_INDEX):
+            return False
+
+        self.store.mark_archived(
+            tweet_id=tweet.id,
+            media_index=TEXT_ONLY_INDEX,
+            username=username,
+            file_path=Path(""),
+            tweet_text=tweet.text,
+        )
+        logger.info("텍스트 게시물 저장: @%s tweet=%s", username, tweet.id)
+
+        if self.config.telegram:
+            tweet_url = f"https://x.com/{username}/status/{tweet.id}"
+            try:
+                await send_text_post(
+                    self.config.telegram,
+                    username,
+                    tweet.text,
+                    tweet_url,
+                )
+            except Exception:
+                logger.exception("Telegram 텍스트 전송 실패: tweet=%s", tweet.id)
+
+        return True
 
     @staticmethod
     def _extension_for_media(media) -> str:
