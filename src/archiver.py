@@ -155,22 +155,28 @@ class XArtArchiver:
         return saved
 
     async def _handle_text_only_tweet(self, tweet, username: str) -> bool:
-        """미디어 없는 텍스트 전용 게시물을 처리합니다. 새로 처리했으면 True 반환."""
-        if not getattr(tweet, "text", None):
-            # 텍스트조차 없는 글(예: 리트윗만 있는 등)은 건너뜁니다
+        """미디어 없는 텍스트 전용 게시물(투표 포함)을 처리합니다. 새로 처리했으면 True 반환."""
+        poll_lines = self._extract_poll_choice_lines(tweet)
+
+        if not getattr(tweet, "text", None) and not poll_lines:
+            # 텍스트도 투표도 없는 글(예: 리트윗만 있는 등)은 건너뜁니다
             return False
 
         if self.store.is_archived(tweet.id, TEXT_ONLY_INDEX):
             return False
+
+        full_text = tweet.text or ""
+        if poll_lines:
+            full_text = (full_text + "\n\n📊 투표 항목:\n" + "\n".join(poll_lines)).strip()
 
         self.store.mark_archived(
             tweet_id=tweet.id,
             media_index=TEXT_ONLY_INDEX,
             username=username,
             file_path=Path(""),
-            tweet_text=tweet.text,
+            tweet_text=full_text,
         )
-        logger.info("텍스트 게시물 저장: @%s tweet=%s", username, tweet.id)
+        logger.info("텍스트/투표 게시물 저장: @%s tweet=%s", username, tweet.id)
 
         if self.config.telegram:
             tweet_url = f"https://x.com/{username}/status/{tweet.id}"
@@ -178,13 +184,32 @@ class XArtArchiver:
                 await send_text_post(
                     self.config.telegram,
                     username,
-                    tweet.text,
+                    full_text,
                     tweet_url,
                 )
             except Exception:
                 logger.exception("Telegram 텍스트 전송 실패: tweet=%s", tweet.id)
 
         return True
+
+    @staticmethod
+    def _extract_poll_choice_lines(tweet) -> list[str]:
+        """투표 게시물이면 선택지 텍스트 목록을 반환합니다. 없거나 실패하면 빈 리스트."""
+        poll = getattr(tweet, "poll", None)
+        if poll is None:
+            return []
+
+        choices = getattr(poll, "choices", None) or []
+        lines = []
+        for choice in choices:
+            # choice는 twikit 버전에 따라 dict일 수도, 객체일 수도 있어 둘 다 대응
+            if isinstance(choice, dict):
+                label = choice.get("label")
+            else:
+                label = getattr(choice, "label", None)
+            if label:
+                lines.append(f"- {label}")
+        return lines
 
     @staticmethod
     def _extension_for_media(media) -> str:
